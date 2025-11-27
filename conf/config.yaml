@@ -1,0 +1,68 @@
+# Verdaccio configuration with vintage plugin
+# https://verdaccio.org/docs/configuration
+
+storage: /verdaccio/storage/data
+plugins: /verdaccio/plugins
+
+# Web UI
+web:
+  title: Vintage NPM Registry
+  # Optionally disable to reduce attack surface
+  # enable: false
+
+# Authentication - allow anonymous access for reads
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    # Allow unlimited users to register (set to -1 to disable)
+    max_users: 1000
+
+# Upstream registry
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: true
+
+# Package access rules
+packages:
+  # Scoped packages
+  '@*/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+  # All other packages
+  '**':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+# Server settings
+listen: 0.0.0.0:4873
+server:
+  keepAliveTimeout: 60
+
+# Middleware
+middlewares:
+  audit:
+    enabled: true
+
+# Logging
+log: { type: stdout, format: pretty, level: info }
+
+# =============================================================================
+# VINTAGE PLUGIN CONFIGURATION
+# =============================================================================
+filters:
+  vintage:
+    # Global cutoff date - hide ALL package versions published after this date
+    # Comment out or remove to disable global cutoff
+    # global_cutoff: '2024-01-01T00:00:00.000Z'
+
+    # Path to denylist file for per-package rules
+    denylist_file: /verdaccio/conf/denylist.txt
+
+    # Watch denylist file for changes (hot reload)
+    watch_denylist: true

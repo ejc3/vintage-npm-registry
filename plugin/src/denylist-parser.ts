@@ -1,6 +1,13 @@
 import { readFileSync, existsSync } from 'fs';
 import type { DenylistRule } from './types';
 
+export class DenylistFileNotFoundError extends Error {
+  constructor(filePath: string) {
+    super(`Denylist file not found at configured path: ${filePath}`);
+    this.name = 'DenylistFileNotFoundError';
+  }
+}
+
 /**
  * Check if a value looks like a date (contains '-' which semver versions don't have
  * except for prerelease tags, but dates have multiple dashes in specific positions)
@@ -95,12 +102,12 @@ export function parseDenylistContent(content: string): ParseResult {
 }
 
 /**
- * Parse denylist file from disk
- * Returns empty rules array if file doesn't exist
+ * Parse denylist file from disk.
+ * Throws if the configured file is missing.
  */
 export function parseDenylistFile(filePath: string): ParseResult {
   if (!existsSync(filePath)) {
-    return { rules: [], errors: [] };
+    throw new DenylistFileNotFoundError(filePath);
   }
 
   const content = readFileSync(filePath, 'utf-8');

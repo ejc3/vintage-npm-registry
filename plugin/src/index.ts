@@ -5,7 +5,7 @@ import type {
   Package,
 } from '@verdaccio/types';
 import type { VintagePluginConfig, DenylistRule, PackageMetadata } from './types';
-import { parseDenylistFile } from './denylist-parser';
+import { parseDenylistFile, DenylistFileNotFoundError } from './denylist-parser';
 import { filterPackageMetadata } from './metadata-filter';
 import { watchFile, type FileWatcher } from './file-watcher';
 
@@ -83,10 +83,18 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
         'Denylist loaded'
       );
     } catch (error) {
-      this.logger.error(
-        { error, path: this.config.denylist_file },
-        'Failed to load denylist file, keeping previous rules'
-      );
+      if (error instanceof DenylistFileNotFoundError) {
+        this.logger.error(
+          { path: this.config.denylist_file },
+          error.message
+        );
+        throw error;
+      } else {
+        this.logger.error(
+          { error, path: this.config.denylist_file },
+          'Failed to load denylist file, keeping previous rules'
+        );
+      }
     }
   }
 

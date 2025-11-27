@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { parseDenylistLine, parseDenylistContent } from '../src/denylist-parser';
+import {
+  parseDenylistLine,
+  parseDenylistContent,
+  parseDenylistFile,
+  DenylistFileNotFoundError,
+} from '../src/denylist-parser';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { mkdtempSync, writeFileSync, unlinkSync, rmdirSync } from 'fs';
 
 describe('parseDenylistLine', () => {
   describe('version rules', () => {
@@ -156,5 +164,39 @@ another bad line
     const result = parseDenylistContent(content);
     expect(result.rules).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+describe('parseDenylistFile', () => {
+  it('throws when denylist file is missing', () => {
+    const missingPath = join(tmpdir(), `vintage-missing-${Date.now()}.txt`);
+    expect(() => parseDenylistFile(missingPath)).toThrow(
+      DenylistFileNotFoundError
+    );
+  });
+
+  it('parses existing file from disk', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'vintage-denylist-'));
+    const filePath = join(tempDir, 'denylist.txt');
+
+    try {
+      writeFileSync(filePath, 'lodash@4.17.20\n');
+      const result = parseDenylistFile(filePath);
+      expect(result.rules).toEqual([
+        { package: 'lodash', type: 'version', version: '4.17.20' },
+      ]);
+      expect(result.errors).toHaveLength(0);
+    } finally {
+      try {
+        unlinkSync(filePath);
+      } catch {
+        // ignore
+      }
+      try {
+        rmdirSync(tempDir);
+      } catch {
+        // ignore
+      }
+    }
   });
 });

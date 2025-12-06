@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'fs';
 import type { DenylistRule } from './types';
+import { parsePackageValue, looksLikeDate, parseFileContent } from './parse-utils';
 
 export class DenylistFileNotFoundError extends Error {
   constructor(filePath: string) {
@@ -9,64 +10,16 @@ export class DenylistFileNotFoundError extends Error {
 }
 
 /**
- * Check if a value looks like a date (contains '-' which semver versions don't have
- * except for prerelease tags, but dates have multiple dashes in specific positions)
- */
-function looksLikeDate(value: string): boolean {
-  // ISO date: 2024-01-01 or 2024-01-01T00:00:00.000Z
-  // Semver with prerelease: 1.0.0-alpha.1, 1.0.0-rc.1
-  // Key difference: dates start with 4 digits then dash
-  return /^\d{4}-\d{2}-\d{2}/.test(value);
-}
-
-/**
  * Parse a single line from the denylist file
  * Returns null if the line should be skipped (comment, blank, invalid)
- *
- * Supports allowlist entries with + prefix:
- *   +package@version  -> Allowlist specific version (bypasses date filtering)
  */
 export function parseDenylistLine(line: string): DenylistRule | null {
-  const trimmed = line.trim();
-
-  // Skip empty lines and comments
-  if (!trimmed || trimmed.startsWith('#')) {
+  const parsed = parsePackageValue(line);
+  if (!parsed) {
     return null;
   }
 
-  // Check for allowlist prefix
-  const isAllowlist = trimmed.startsWith('+');
-  const content = isAllowlist ? trimmed.slice(1) : trimmed;
-
-  // Find the last @ that separates package name from version/date
-  // This handles scoped packages like @babel/core@2024-01-01
-  const lastAtIndex = content.lastIndexOf('@');
-
-  // Must have @ and it can't be at position 0 (that would be @scope with no version)
-  // For scoped packages, first @ is at position 0, so lastAtIndex must be > 0
-  if (lastAtIndex <= 0) {
-    return null;
-  }
-
-  const packageName = content.slice(0, lastAtIndex);
-  const value = content.slice(lastAtIndex + 1);
-
-  if (!packageName || !value) {
-    return null;
-  }
-
-  // Allowlist entries must be version-based (not date-based)
-  if (isAllowlist) {
-    // Allowlist with date doesn't make sense - reject it
-    if (looksLikeDate(value)) {
-      return null;
-    }
-    return {
-      package: packageName,
-      type: 'allowlist',
-      version: value,
-    };
-  }
+  const { package: packageName, value } = parsed;
 
   // Determine if this is a date or version rule
   if (looksLikeDate(value)) {
@@ -97,28 +50,7 @@ export interface ParseResult {
  * Parse denylist file content into rules
  */
 export function parseDenylistContent(content: string): ParseResult {
-  const lines = content.split(/\r?\n/);
-  const rules: DenylistRule[] = [];
-  const errors: Array<{ line: number; content: string }> = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Skip empty lines and comments silently
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
-    }
-
-    const rule = parseDenylistLine(line);
-    if (rule) {
-      rules.push(rule);
-    } else {
-      errors.push({ line: i + 1, content: line });
-    }
-  }
-
-  return { rules, errors };
+  return parseFileContent(content, parseDenylistLine);
 }
 
 /**

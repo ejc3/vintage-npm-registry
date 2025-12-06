@@ -9,7 +9,10 @@ export interface VintagePluginConfig {
   /** Path to denylist file */
   denylist_file?: string;
 
-  /** Watch denylist file for changes (default: true) */
+  /** Path to allowlist file (versions that bypass date filtering) */
+  allowlist_file?: string;
+
+  /** Watch denylist/allowlist files for changes (default: true) */
   watch_denylist?: boolean;
 }
 
@@ -36,20 +39,20 @@ export interface DateDenylistRule {
 }
 
 /**
- * A rule to explicitly allow a specific version (bypasses date filtering)
+ * A rule parsed from the denylist file
  */
-export interface AllowlistVersionRule {
+export type DenylistRule = VersionDenylistRule | DateDenylistRule;
+
+/**
+ * A rule to explicitly allow a specific version (bypasses date filtering)
+ * Parsed from allowlist.txt file
+ */
+export interface AllowlistRule {
   /** Package name (e.g., "lodash" or "@babel/core") */
   package: string;
-  type: 'allowlist';
   /** Specific version to allow */
   version: string;
 }
-
-/**
- * A rule parsed from the denylist file
- */
-export type DenylistRule = VersionDenylistRule | DateDenylistRule | AllowlistVersionRule;
 
 /**
  * Simplified package metadata types (subset of @verdaccio/types Package)

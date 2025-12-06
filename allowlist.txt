@@ -1,0 +1,16 @@
+# Vintage NPM Registry - Allowlist
+#
+# Add package@version entries to allow specific versions
+# that bypass date filtering rules.
+#
+# Format:
+#   package@version    - Allow specific version
+#
+# Examples:
+#   lodash@4.17.21
+#   react@18.3.0
+#   @babel/core@7.24.0
+#
+# Note:
+# - Only version entries are supported (not date entries)
+# - Denylist takes precedence over allowlist

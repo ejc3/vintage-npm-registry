@@ -258,6 +258,7 @@ describe('filterPackageMetadata', () => {
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [],
+      allowlistRules: [],
     });
     expect(Object.keys(result.versions)).toEqual(['1.0.0']);
     expect(result['dist-tags'].latest).toBe('1.0.0');
@@ -269,6 +270,7 @@ describe('filterPackageMetadata', () => {
       denylistRules: [
         { package: 'test-package', type: 'version', version: '2.0.0' },
       ],
+      allowlistRules: [],
     });
     expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '3.0.0']);
   });
@@ -279,6 +281,7 @@ describe('filterPackageMetadata', () => {
       denylistRules: [
         { package: 'test-package', type: 'date', cutoffDate: new Date('2024-02-01') },
       ],
+      allowlistRules: [],
     });
     expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0']);
   });
@@ -290,6 +293,7 @@ describe('filterPackageMetadata', () => {
       denylistRules: [
         { package: 'test-package', type: 'date', cutoffDate: new Date('2024-01-01') },
       ],
+      allowlistRules: [],
     });
     expect(Object.keys(result.versions)).toEqual(['1.0.0']);
   });
@@ -300,6 +304,7 @@ describe('filterPackageMetadata', () => {
       denylistRules: [
         { package: 'other-package', type: 'version', version: '2.0.0' },
       ],
+      allowlistRules: [],
     });
     expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0', '3.0.0']);
   });
@@ -309,6 +314,7 @@ describe('filterPackageMetadata', () => {
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-02-01'),
       denylistRules: [],
+      allowlistRules: [],
     });
     expect(result.time).toEqual({
       created: '2023-01-01T00:00:00.000Z',
@@ -325,6 +331,7 @@ describe('filterPackageMetadata', () => {
       denylistRules: [
         { package: 'test-package', type: 'version', version: '2.0.0' },
       ],
+      allowlistRules: [],
     });
     expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '3.0.0']);
   });
@@ -333,8 +340,9 @@ describe('filterPackageMetadata', () => {
     const metadata = createMetadata();
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
-      denylistRules: [
-        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'test-package', version: '3.0.0' },
       ],
     });
     // 1.0.0 is before cutoff, 3.0.0 is explicitly allowed
@@ -346,7 +354,9 @@ describe('filterPackageMetadata', () => {
     const result = filterPackageMetadata(metadata, {
       denylistRules: [
         { package: 'test-package', type: 'date', cutoffDate: new Date('2024-01-01') },
-        { package: 'test-package', type: 'allowlist', version: '2.0.0' },
+      ],
+      allowlistRules: [
+        { package: 'test-package', version: '2.0.0' },
       ],
     });
     // 1.0.0 is before cutoff, 2.0.0 is explicitly allowed
@@ -358,8 +368,10 @@ describe('filterPackageMetadata', () => {
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [
-        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
         { package: 'test-package', type: 'version', version: '3.0.0' },
+      ],
+      allowlistRules: [
+        { package: 'test-package', version: '3.0.0' },
       ],
     });
     // 3.0.0 is allowed but also blocked - block wins
@@ -370,8 +382,9 @@ describe('filterPackageMetadata', () => {
     const metadata = createMetadata();
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
-      denylistRules: [
-        { package: 'test-package', type: 'allowlist', version: '99.0.0' },
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'test-package', version: '99.0.0' },
       ],
     });
     // Only 1.0.0 remains, 99.0.0 doesn't exist in original
@@ -382,8 +395,9 @@ describe('filterPackageMetadata', () => {
     const metadata = createMetadata();
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
-      denylistRules: [
-        { package: 'other-package', type: 'allowlist', version: '3.0.0' },
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'other-package', version: '3.0.0' },
       ],
     });
     // Allowlist is for different package, should not affect test-package
@@ -394,8 +408,9 @@ describe('filterPackageMetadata', () => {
     const metadata = createMetadata();
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
-      denylistRules: [
-        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'test-package', version: '3.0.0' },
       ],
     });
     expect(result.time).toEqual({
@@ -410,8 +425,9 @@ describe('filterPackageMetadata', () => {
     const metadata = createMetadata();
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
-      denylistRules: [
-        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'test-package', version: '3.0.0' },
       ],
     });
     // Original dist-tags.latest was 3.0.0, which is now allowed

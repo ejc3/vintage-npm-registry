@@ -30,13 +30,15 @@ CONTAINER_NAME="vintage-npm-registry-test"
 IMAGE_NAME="vintage-npm-registry"
 REGISTRY_URL="http://localhost:4873"
 TEST_DENYLIST="./test-denylist.txt"
+TEST_ALLOWLIST="./test-allowlist.txt"
+TEST_CONFIG="./test-config.yaml"
 
 # Cleanup function
 cleanup() {
     echo -e "\n${YELLOW}Cleaning up...${NC}"
     podman stop "$CONTAINER_NAME" 2>/dev/null || true
     podman rm "$CONTAINER_NAME" 2>/dev/null || true
-    rm -f "$TEST_DENYLIST"
+    rm -f "$TEST_DENYLIST" "$TEST_ALLOWLIST" "$TEST_CONFIG"
 }
 
 # Run cleanup on exit
@@ -288,9 +290,113 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Test 10: Verify npm install works
+# Test 10: Test allowlist functionality
 # ----------------------------------------------------------------------------
-info "Test 10: Testing npm install..."
+info "Test 10: Testing allowlist to bypass date filtering..."
+
+# Stop current container to restart with allowlist config
+podman stop "$CONTAINER_NAME" 2>/dev/null || true
+podman rm "$CONTAINER_NAME" 2>/dev/null || true
+
+# Create test config with allowlist
+cat > "$TEST_CONFIG" << 'EOF'
+storage: /verdaccio/storage/data
+plugins: /verdaccio/plugins
+
+web:
+  title: Vintage NPM Registry Test
+
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    max_users: 1000
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: true
+
+packages:
+  '@*/*':
+    access: $all
+    publish: $authenticated
+    proxy: npmjs
+  '**':
+    access: $all
+    publish: $authenticated
+    proxy: npmjs
+
+listen: 0.0.0.0:4873
+log: { type: stdout, format: pretty, level: info }
+
+filters:
+  vintage:
+    denylist_file: /verdaccio/conf/denylist.txt
+    allowlist_file: /verdaccio/conf/allowlist.txt
+    watch_denylist: true
+EOF
+
+# Create denylist with date cutoff
+cat > "$TEST_DENYLIST" << 'EOF'
+# Test denylist - date cutoff
+lodash@2020-01-01
+EOF
+
+# Create allowlist to allow a specific version after the cutoff
+cat > "$TEST_ALLOWLIST" << 'EOF'
+# Test allowlist - allow specific version despite date cutoff
+lodash@4.17.21
+EOF
+
+# Start container with custom config and allowlist
+podman run -d \
+    --name "$CONTAINER_NAME" \
+    -p 4873:4873 \
+    -v "$PWD/$TEST_CONFIG:/verdaccio/conf/config.yaml:ro" \
+    -v "$PWD/$TEST_DENYLIST:/verdaccio/conf/denylist.txt:ro" \
+    -v "$PWD/$TEST_ALLOWLIST:/verdaccio/conf/allowlist.txt:ro" \
+    "$IMAGE_NAME" > /dev/null
+
+if wait_for_registry; then
+    pass "Registry restarted with allowlist config"
+else
+    fail "Registry failed to start with allowlist config"
+fi
+
+# 4.17.21 was published 2021-02-20, should be filtered by date cutoff
+# BUT it's in the allowlist, so should be available
+if version_exists "lodash" "4.17.21"; then
+    pass "lodash@4.17.21 is available (allowlisted despite date cutoff)"
+else
+    fail "lodash@4.17.21 should be available (in allowlist)"
+fi
+
+# 4.17.20 was published 2020-08-13, should be filtered (not in allowlist)
+if version_exists "lodash" "4.17.20"; then
+    fail "lodash@4.17.20 should be filtered (after date cutoff, not in allowlist)"
+else
+    pass "lodash@4.17.20 is filtered (after date cutoff, not in allowlist)"
+fi
+
+# 4.17.15 was published 2019-07-19, should be available (before cutoff)
+if version_exists "lodash" "4.17.15"; then
+    pass "lodash@4.17.15 is available (before date cutoff)"
+else
+    fail "lodash@4.17.15 should be available (before date cutoff)"
+fi
+
+# Verify latest tag points to the allowlisted version
+latest=$(get_latest_version "lodash")
+if [ "$latest" = "4.17.21" ]; then
+    pass "latest tag points to 4.17.21 (allowlisted version)"
+else
+    fail "latest tag should be 4.17.21 (allowlisted), got: $latest"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 11: Verify npm install works
+# ----------------------------------------------------------------------------
+info "Test 11: Testing npm install..."
 
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
@@ -327,6 +433,7 @@ echo "  • Version-specific blocking"
 echo "  • Scoped package filtering"
 echo "  • Combined filtering rules"
 echo "  • Hot reload of denylist changes"
+echo "  • Allowlist to bypass date filtering"
 echo "  • dist-tags update after filtering"
 echo "  • npm install compatibility"
 echo ""

@@ -1,5 +1,5 @@
 import semver from 'semver';
-import type { DenylistRule, PackageMetadata, VersionManifest } from './types';
+import type { DenylistRule, AllowlistRule, PackageMetadata, VersionManifest } from './types';
 
 /**
  * Get the earliest (most restrictive) cutoff date from two optional dates
@@ -175,6 +175,7 @@ export function fixDistTags(
 export interface FilterOptions {
   globalCutoff?: Date;
   denylistRules: DenylistRule[];
+  allowlistRules: AllowlistRule[];
 }
 
 /**
@@ -184,28 +185,28 @@ export function filterPackageMetadata(
   metadata: PackageMetadata,
   options: FilterOptions
 ): PackageMetadata {
-  const { globalCutoff, denylistRules } = options;
+  const { globalCutoff, denylistRules, allowlistRules } = options;
 
-  // Get rules for this specific package
-  const packageRules = denylistRules.filter((r) => r.package === metadata.name);
+  // Get denylist rules for this specific package
+  const packageDenylistRules = denylistRules.filter((r) => r.package === metadata.name);
 
-  // Collect blocked versions
+  // Collect blocked versions from denylist
   const blockedVersions = new Set(
-    packageRules
+    packageDenylistRules
       .filter((r): r is DenylistRule & { type: 'version' } => r.type === 'version')
       .map((r) => r.version)
   );
 
-  // Collect allowed versions (bypass date filtering)
+  // Collect allowed versions from allowlist (bypass date filtering)
   const allowedVersions = new Set(
-    packageRules
-      .filter((r): r is DenylistRule & { type: 'allowlist' } => r.type === 'allowlist')
+    allowlistRules
+      .filter((r) => r.package === metadata.name)
       .map((r) => r.version)
   );
 
   // Find per-package date cutoff (use earliest if multiple)
   let packageDateCutoff: Date | undefined;
-  for (const rule of packageRules) {
+  for (const rule of packageDenylistRules) {
     if (rule.type === 'date') {
       if (!packageDateCutoff || rule.cutoffDate < packageDateCutoff) {
         packageDateCutoff = rule.cutoffDate;

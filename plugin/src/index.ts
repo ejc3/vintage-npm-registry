@@ -4,8 +4,9 @@ import type {
   Logger,
   Package,
 } from '@verdaccio/types';
-import type { VintagePluginConfig, DenylistRule, PackageMetadata } from './types';
+import type { VintagePluginConfig, DenylistRule, AllowlistRule, PackageMetadata } from './types';
 import { parseDenylistFile, DenylistFileNotFoundError } from './denylist-parser';
+import { parseAllowlistFile, AllowlistFileNotFoundError } from './allowlist-parser';
 import { filterPackageMetadata } from './metadata-filter';
 import { watchFile, type FileWatcher } from './file-watcher';
 
@@ -18,7 +19,9 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
   private readonly logger: Logger;
   private globalCutoff: Date | undefined;
   private denylistRules: DenylistRule[] = [];
-  private fileWatcher: FileWatcher | null = null;
+  private allowlistRules: AllowlistRule[] = [];
+  private denylistWatcher: FileWatcher | null = null;
+  private allowlistWatcher: FileWatcher | null = null;
 
   constructor(config: VintagePluginConfig, options: { config: Config; logger: Logger }) {
     this.config = config;
@@ -43,9 +46,23 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
 
       // Setup file watcher for hot reload
       if (config.watch_denylist !== false) {
-        this.fileWatcher = watchFile(
+        this.denylistWatcher = watchFile(
           config.denylist_file,
           () => this.loadDenylist(),
+          { logger: this.logger }
+        );
+      }
+    }
+
+    // Load allowlist file
+    if (config.allowlist_file) {
+      this.loadAllowlist();
+
+      // Setup file watcher for hot reload
+      if (config.watch_denylist !== false) {
+        this.allowlistWatcher = watchFile(
+          config.allowlist_file,
+          () => this.loadAllowlist(),
           { logger: this.logger }
         );
       }
@@ -99,6 +116,50 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
   }
 
   /**
+   * Load or reload the allowlist file
+   */
+  private loadAllowlist(): void {
+    if (!this.config.allowlist_file) {
+      return;
+    }
+
+    try {
+      const result = parseAllowlistFile(this.config.allowlist_file);
+
+      // Log any parse errors
+      for (const error of result.errors) {
+        this.logger.warn(
+          { line: error.line, content: error.content },
+          'Invalid allowlist entry, skipping'
+        );
+      }
+
+      this.allowlistRules = result.rules;
+      this.logger.info(
+        {
+          path: this.config.allowlist_file,
+          ruleCount: result.rules.length,
+          errorCount: result.errors.length,
+        },
+        'Allowlist loaded'
+      );
+    } catch (error) {
+      if (error instanceof AllowlistFileNotFoundError) {
+        this.logger.error(
+          { path: this.config.allowlist_file },
+          error.message
+        );
+        throw error;
+      } else {
+        this.logger.error(
+          { error, path: this.config.allowlist_file },
+          'Failed to load allowlist file, keeping previous rules'
+        );
+      }
+    }
+  }
+
+  /**
    * Filter package metadata before it's returned to the client.
    * This is the main entry point called by Verdaccio.
    */
@@ -106,7 +167,7 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
     const packageName = metadata.name;
 
     // Check if we have any filtering to do
-    if (!this.globalCutoff && this.denylistRules.length === 0) {
+    if (!this.globalCutoff && this.denylistRules.length === 0 && this.allowlistRules.length === 0) {
       return metadata;
     }
 
@@ -118,6 +179,7 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
       {
         globalCutoff: this.globalCutoff,
         denylistRules: this.denylistRules,
+        allowlistRules: this.allowlistRules,
       }
     );
 

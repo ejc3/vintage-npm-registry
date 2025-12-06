@@ -394,9 +394,51 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Test 11: Verify npm install works
+# Test 11: Test allowlist with semver range
 # ----------------------------------------------------------------------------
-info "Test 11: Testing npm install..."
+info "Test 11: Testing allowlist with semver range..."
+
+# Update allowlist to use a caret range
+cat > "$TEST_ALLOWLIST" << 'EOF'
+# Test allowlist - allow versions matching semver range
+lodash@^4.17.20
+EOF
+
+# Wait for hot reload
+sleep 4
+
+# 4.17.20 was published 2020-08-13, should match ^4.17.20
+if version_exists "lodash" "4.17.20"; then
+    pass "lodash@4.17.20 is available (matches ^4.17.20 range)"
+else
+    fail "lodash@4.17.20 should be available (matches ^4.17.20 range)"
+fi
+
+# 4.17.21 was published 2021-02-20, should also match ^4.17.20
+if version_exists "lodash" "4.17.21"; then
+    pass "lodash@4.17.21 is available (matches ^4.17.20 range)"
+else
+    fail "lodash@4.17.21 should be available (matches ^4.17.20 range)"
+fi
+
+# 4.17.16 was published 2020-07-08, does NOT match ^4.17.20 (less than 4.17.20)
+if version_exists "lodash" "4.17.16"; then
+    fail "lodash@4.17.16 should be filtered (after cutoff, doesn't match ^4.17.20)"
+else
+    pass "lodash@4.17.16 is filtered (after cutoff, doesn't match ^4.17.20)"
+fi
+
+# 4.17.15 was published 2019-07-19, should still be available (before cutoff)
+if version_exists "lodash" "4.17.15"; then
+    pass "lodash@4.17.15 is available (before date cutoff)"
+else
+    fail "lodash@4.17.15 should be available (before date cutoff)"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 12: Verify npm install works
+# ----------------------------------------------------------------------------
+info "Test 12: Testing npm install..."
 
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
@@ -434,6 +476,7 @@ echo "  • Scoped package filtering"
 echo "  • Combined filtering rules"
 echo "  • Hot reload of denylist changes"
 echo "  • Allowlist to bypass date filtering"
+echo "  • Allowlist with semver ranges"
 echo "  • dist-tags update after filtering"
 echo "  • npm install compatibility"
 echo ""

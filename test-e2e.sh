@@ -436,9 +436,69 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Test 12: Verify npm install works
+# Test 12: Test denylist with semver range
 # ----------------------------------------------------------------------------
-info "Test 12: Testing npm install..."
+info "Test 12: Testing denylist with semver range..."
+
+# Clear allowlist and set denylist with semver range
+cat > "$TEST_ALLOWLIST" << 'EOF'
+# Test allowlist - empty
+EOF
+
+cat > "$TEST_DENYLIST" << 'EOF'
+# Test denylist - block versions matching semver range
+lodash@^4.17.20
+EOF
+
+# Wait for hot reload
+sleep 4
+
+# 4.17.20 was published 2020-08-13, should be blocked by ^4.17.20
+if version_exists "lodash" "4.17.20"; then
+    fail "lodash@4.17.20 should be blocked (matches ^4.17.20 range)"
+else
+    pass "lodash@4.17.20 is blocked (matches ^4.17.20 range)"
+fi
+
+# 4.17.21 was published 2021-02-20, should also be blocked by ^4.17.20
+if version_exists "lodash" "4.17.21"; then
+    fail "lodash@4.17.21 should be blocked (matches ^4.17.20 range)"
+else
+    pass "lodash@4.17.21 is blocked (matches ^4.17.20 range)"
+fi
+
+# 4.17.15 was published 2019-07-19, should be available (doesn't match ^4.17.20)
+if version_exists "lodash" "4.17.15"; then
+    pass "lodash@4.17.15 is available (doesn't match ^4.17.20 range)"
+else
+    fail "lodash@4.17.15 should be available (doesn't match ^4.17.20 range)"
+fi
+
+# 4.17.16 was published 2020-07-08, should be available (doesn't match ^4.17.20)
+if version_exists "lodash" "4.17.16"; then
+    pass "lodash@4.17.16 is available (doesn't match ^4.17.20 range)"
+else
+    fail "lodash@4.17.16 should be available (doesn't match ^4.17.20 range)"
+fi
+
+# Verify latest tag points to highest unblocked version
+latest=$(get_latest_version "lodash")
+# With ^4.17.20 blocked, latest should be 4.17.19 or earlier available version
+if [ "$latest" = "4.17.19" ]; then
+    pass "latest tag points to 4.17.19 (highest unblocked version)"
+else
+    # It might be a different version depending on what's available
+    if version_exists "lodash" "$latest" && ! echo "$latest" | grep -qE "^4\.17\.(2[0-9]|[3-9][0-9])"; then
+        pass "latest tag points to $latest (an unblocked version)"
+    else
+        fail "latest tag should point to an unblocked version, got: $latest"
+    fi
+fi
+
+# ----------------------------------------------------------------------------
+# Test 13: Verify npm install works
+# ----------------------------------------------------------------------------
+info "Test 13: Testing npm install..."
 
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
@@ -477,6 +537,7 @@ echo "  • Combined filtering rules"
 echo "  • Hot reload of denylist changes"
 echo "  • Allowlist to bypass date filtering"
 echo "  • Allowlist with semver ranges"
+echo "  • Denylist with semver ranges"
 echo "  • dist-tags update after filtering"
 echo "  • npm install compatibility"
 echo ""

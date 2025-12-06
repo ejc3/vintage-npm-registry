@@ -16,7 +16,7 @@ describe('parseDenylistLine', () => {
       expect(result).toEqual({
         package: 'lodash',
         type: 'version',
-        version: '4.17.20',
+        range: '4.17.20',
       });
     });
 
@@ -25,7 +25,7 @@ describe('parseDenylistLine', () => {
       expect(result).toEqual({
         package: '@babel/core',
         type: 'version',
-        version: '7.23.0',
+        range: '7.23.0',
       });
     });
 
@@ -34,7 +34,70 @@ describe('parseDenylistLine', () => {
       expect(result).toEqual({
         package: 'react',
         type: 'version',
-        version: '18.0.0-rc.1',
+        range: '18.0.0-rc.1',
+      });
+    });
+
+    it('parses caret range', () => {
+      const result = parseDenylistLine('lodash@^4.17.0');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'version',
+        range: '^4.17.0',
+      });
+    });
+
+    it('parses tilde range', () => {
+      const result = parseDenylistLine('lodash@~4.17.0');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'version',
+        range: '~4.17.0',
+      });
+    });
+
+    it('parses comparison range', () => {
+      const result = parseDenylistLine('lodash@>=4.17.20');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'version',
+        range: '>=4.17.20',
+      });
+    });
+
+    it('parses x-range', () => {
+      const result = parseDenylistLine('lodash@4.17.x');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'version',
+        range: '4.17.x',
+      });
+    });
+
+    it('parses hyphen range', () => {
+      const result = parseDenylistLine('lodash@4.17.0 - 4.17.21');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'version',
+        range: '4.17.0 - 4.17.21',
+      });
+    });
+
+    it('parses less than range', () => {
+      const result = parseDenylistLine('lodash@<4.17.20');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'version',
+        range: '<4.17.20',
+      });
+    });
+
+    it('parses less than or equal range', () => {
+      const result = parseDenylistLine('lodash@<=4.17.20');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'version',
+        range: '<=4.17.20',
       });
     });
   });
@@ -83,14 +146,10 @@ describe('parseDenylistLine', () => {
       expect(parseDenylistLine('lodash')).toBeNull();
     });
 
-    it('treats non-date strings as version numbers', () => {
-      // "not-a-date" doesn't match YYYY-MM-DD pattern, so it's a version
-      const result = parseDenylistLine('lodash@not-a-date');
-      expect(result).toEqual({
-        package: 'lodash',
-        type: 'version',
-        version: 'not-a-date',
-      });
+    it('returns null for invalid semver values', () => {
+      // "not-a-date" doesn't match YYYY-MM-DD pattern and is not valid semver
+      expect(parseDenylistLine('lodash@not-a-date')).toBeNull();
+      expect(parseDenylistLine('lodash@abc.def.ghi')).toBeNull();
     });
 
     it('returns null for date-like string that parses to invalid date', () => {
@@ -183,7 +242,7 @@ describe('parseDenylistFile', () => {
       writeFileSync(filePath, 'lodash@4.17.20\n');
       const result = parseDenylistFile(filePath);
       expect(result.rules).toEqual([
-        { package: 'lodash', type: 'version', version: '4.17.20' },
+        { package: 'lodash', type: 'version', range: '4.17.20' },
       ]);
       expect(result.errors).toHaveLength(0);
     } finally {

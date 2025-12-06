@@ -88,31 +88,81 @@ describe('removeBlockedVersions', () => {
   const versions = {
     '1.0.0': makeManifest('1.0.0'),
     '2.0.0': makeManifest('2.0.0'),
+    '2.1.0': makeManifest('2.1.0'),
     '3.0.0': makeManifest('3.0.0'),
   };
 
-  it('removes blocked versions', () => {
-    const blocked = new Set(['2.0.0']);
+  it('removes exact blocked version', () => {
+    const blocked = ['2.0.0'];
+    const result = removeBlockedVersions(versions, blocked);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.1.0', '3.0.0']);
+  });
+
+  it('removes multiple blocked versions', () => {
+    const blocked = ['1.0.0', '3.0.0'];
+    const result = removeBlockedVersions(versions, blocked);
+    expect(Object.keys(result).sort()).toEqual(['2.0.0', '2.1.0']);
+  });
+
+  it('handles empty blocked array', () => {
+    const blocked: string[] = [];
+    const result = removeBlockedVersions(versions, blocked);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0', '2.1.0', '3.0.0']);
+  });
+
+  it('handles non-existent blocked version', () => {
+    const blocked = ['4.0.0'];
+    const result = removeBlockedVersions(versions, blocked);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0', '2.1.0', '3.0.0']);
+  });
+
+  it('blocks versions matching caret range', () => {
+    // ^2.0.0 matches 2.0.0 and 2.1.0 (same major)
+    const blocked = ['^2.0.0'];
     const result = removeBlockedVersions(versions, blocked);
     expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0']);
   });
 
-  it('removes multiple blocked versions', () => {
-    const blocked = new Set(['1.0.0', '3.0.0']);
+  it('blocks versions matching tilde range', () => {
+    // ~2.0.0 matches only 2.0.x
+    const blocked = ['~2.0.0'];
     const result = removeBlockedVersions(versions, blocked);
-    expect(Object.keys(result)).toEqual(['2.0.0']);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.1.0', '3.0.0']);
   });
 
-  it('handles empty blocked set', () => {
-    const blocked = new Set<string>();
+  it('blocks versions matching comparison range', () => {
+    // >=2.0.0 matches 2.0.0, 2.1.0, 3.0.0
+    const blocked = ['>=2.0.0'];
     const result = removeBlockedVersions(versions, blocked);
-    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0', '3.0.0']);
+    expect(Object.keys(result)).toEqual(['1.0.0']);
   });
 
-  it('handles non-existent blocked version', () => {
-    const blocked = new Set(['4.0.0']);
+  it('blocks versions matching x-range', () => {
+    // 2.x matches all 2.x versions
+    const blocked = ['2.x'];
     const result = removeBlockedVersions(versions, blocked);
-    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0', '3.0.0']);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0']);
+  });
+
+  it('blocks versions matching hyphen range', () => {
+    // 2.0.0 - 2.1.0 matches 2.0.0 and 2.1.0
+    const blocked = ['2.0.0 - 2.1.0'];
+    const result = removeBlockedVersions(versions, blocked);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0']);
+  });
+
+  it('blocks versions matching less than range', () => {
+    // <2.1.0 matches 1.0.0 and 2.0.0
+    const blocked = ['<2.1.0'];
+    const result = removeBlockedVersions(versions, blocked);
+    expect(Object.keys(result).sort()).toEqual(['2.1.0', '3.0.0']);
+  });
+
+  it('blocks versions matching less than or equal range', () => {
+    // <=2.0.0 matches 1.0.0 and 2.0.0
+    const blocked = ['<=2.0.0'];
+    const result = removeBlockedVersions(versions, blocked);
+    expect(Object.keys(result).sort()).toEqual(['2.1.0', '3.0.0']);
   });
 });
 
@@ -313,7 +363,7 @@ describe('filterPackageMetadata', () => {
     const metadata = createMetadata();
     const result = filterPackageMetadata(metadata, {
       denylistRules: [
-        { package: 'test-package', type: 'version', version: '2.0.0' },
+        { package: 'test-package', type: 'version', range: '2.0.0' },
       ],
       allowlistRules: [],
     });
@@ -347,7 +397,7 @@ describe('filterPackageMetadata', () => {
     const metadata = createMetadata();
     const result = filterPackageMetadata(metadata, {
       denylistRules: [
-        { package: 'other-package', type: 'version', version: '2.0.0' },
+        { package: 'other-package', type: 'version', range: '2.0.0' },
       ],
       allowlistRules: [],
     });
@@ -374,7 +424,7 @@ describe('filterPackageMetadata', () => {
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-06-15'),
       denylistRules: [
-        { package: 'test-package', type: 'version', version: '2.0.0' },
+        { package: 'test-package', type: 'version', range: '2.0.0' },
       ],
       allowlistRules: [],
     });
@@ -482,7 +532,7 @@ describe('filterPackageMetadata', () => {
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [
-        { package: 'test-package', type: 'version', version: '3.0.0' },
+        { package: 'test-package', type: 'version', range: '3.0.0' },
       ],
       allowlistRules: [
         { package: 'test-package', range: '3.0.0' },
@@ -497,7 +547,7 @@ describe('filterPackageMetadata', () => {
     const result = filterPackageMetadata(metadata, {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [
-        { package: 'test-package', type: 'version', version: '3.0.0' },
+        { package: 'test-package', type: 'version', range: '3.0.0' },
       ],
       allowlistRules: [
         { package: 'test-package', range: '^2.0.0' },
@@ -505,6 +555,61 @@ describe('filterPackageMetadata', () => {
     });
     // ^2.0.0 would match 2.0.0 and 3.0.0, but 3.0.0 is blocked
     expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0']);
+  });
+
+  it('denylist semver range blocks multiple versions', () => {
+    const metadata: PackageMetadata = {
+      name: 'test-package',
+      versions: {
+        '1.0.0': makeManifest('1.0.0'),
+        '2.0.0': makeManifest('2.0.0'),
+        '2.1.0': makeManifest('2.1.0'),
+        '3.0.0': makeManifest('3.0.0'),
+      },
+      'dist-tags': { latest: '3.0.0' },
+      time: {
+        '1.0.0': '2023-01-01T00:00:00.000Z',
+        '2.0.0': '2023-06-01T00:00:00.000Z',
+        '2.1.0': '2023-09-01T00:00:00.000Z',
+        '3.0.0': '2024-01-01T00:00:00.000Z',
+      },
+    };
+    const result = filterPackageMetadata(metadata, {
+      denylistRules: [
+        { package: 'test-package', type: 'version', range: '^2.0.0' },
+      ],
+      allowlistRules: [],
+    });
+    // ^2.0.0 blocks 2.0.0 and 2.1.0
+    expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '3.0.0']);
+  });
+
+  it('denylist semver range combined with date cutoff', () => {
+    const metadata: PackageMetadata = {
+      name: 'test-package',
+      versions: {
+        '1.0.0': makeManifest('1.0.0'),
+        '2.0.0': makeManifest('2.0.0'),
+        '2.1.0': makeManifest('2.1.0'),
+        '3.0.0': makeManifest('3.0.0'),
+      },
+      'dist-tags': { latest: '3.0.0' },
+      time: {
+        '1.0.0': '2023-01-01T00:00:00.000Z',
+        '2.0.0': '2023-06-01T00:00:00.000Z',
+        '2.1.0': '2024-02-01T00:00:00.000Z',
+        '3.0.0': '2024-06-01T00:00:00.000Z',
+      },
+    };
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'test-package', type: 'version', range: '~2.0.0' },
+      ],
+      allowlistRules: [],
+    });
+    // Date cutoff removes 2.1.0 and 3.0.0, ~2.0.0 removes 2.0.0
+    expect(Object.keys(result.versions)).toEqual(['1.0.0']);
   });
 
   it('allowlist does not add non-existent versions', () => {

@@ -58,16 +58,22 @@ export function filterVersionsByDate(
 }
 
 /**
- * Remove specific blocked versions
+ * Remove blocked versions matching semver ranges
  */
 export function removeBlockedVersions(
   versions: Record<string, VersionManifest>,
-  blockedVersions: Set<string>
+  blockedRanges: string[]
 ): Record<string, VersionManifest> {
+  if (blockedRanges.length === 0) {
+    return versions;
+  }
+
   const filtered: Record<string, VersionManifest> = {};
 
   for (const [version, manifest] of Object.entries(versions)) {
-    if (!blockedVersions.has(version)) {
+    // Check if this version matches any blocked range
+    const isBlocked = blockedRanges.some((range) => semver.satisfies(version, range));
+    if (!isBlocked) {
       filtered[version] = manifest;
     }
   }
@@ -204,12 +210,10 @@ export function filterPackageMetadata(
   // Get denylist rules for this specific package
   const packageDenylistRules = denylistRules.filter((r) => r.package === metadata.name);
 
-  // Collect blocked versions from denylist
-  const blockedVersions = new Set(
-    packageDenylistRules
-      .filter((r): r is DenylistRule & { type: 'version' } => r.type === 'version')
-      .map((r) => r.version)
-  );
+  // Collect blocked version ranges from denylist
+  const blockedRanges = packageDenylistRules
+    .filter((r): r is DenylistRule & { type: 'version' } => r.type === 'version')
+    .map((r) => r.range);
 
   // Collect allowlist rules for this package (supports semver ranges)
   const packageAllowlistRules = allowlistRules.filter((r) => r.package === metadata.name);
@@ -249,8 +253,8 @@ export function filterPackageMetadata(
   }
 
   // Remove explicitly blocked versions (takes precedence over allowlist)
-  if (blockedVersions.size > 0) {
-    filteredVersions = removeBlockedVersions(filteredVersions, blockedVersions);
+  if (blockedRanges.length > 0) {
+    filteredVersions = removeBlockedVersions(filteredVersions, blockedRanges);
   }
 
   // Fix dist-tags

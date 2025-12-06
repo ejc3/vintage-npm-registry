@@ -45,6 +45,11 @@ Edit `denylist.txt` to block specific packages/versions:
 event-stream@3.3.6
 lodash@4.17.20
 
+# Block version ranges using semver syntax
+lodash@^4.17.0        # block 4.17.0 and above (same major)
+react@~18.2.0         # block 18.2.x only
+axios@>=2.0.0         # block 2.0.0 and above
+
 # Block all versions of a package after a date
 react@2024-01-01
 @babel/core@2024-06-15T00:00:00.000Z
@@ -76,12 +81,19 @@ This is useful when you have a global cutoff date but need specific newer versio
 | Format | Example | Effect |
 |--------|---------|--------|
 | `package@version` | `lodash@4.17.20` | Block specific version |
+| `package@^version` | `lodash@^4.17.0` | Caret range: block same major, >= specified |
+| `package@~version` | `react@~18.2.0` | Tilde range: block same minor, >= specified |
+| `package@>=version` | `axios@>=2.0.0` | Comparison: block >= specified version |
+| `package@<version` | `lodash@<4.0.0` | Comparison: block < specified version |
+| `package@<=version` | `lodash@<=4.17.19` | Comparison: block <= specified version |
+| `package@version.x` | `express@4.18.x` | X-range: block any version in range |
 | `package@YYYY-MM-DD` | `react@2024-01-01` | Block versions after date |
 | `package@ISO-timestamp` | `vue@2024-06-15T12:00:00Z` | Block versions after timestamp |
 
+- Supports all [semver range syntax](https://github.com/npm/node-semver#ranges)
 - Lines starting with `#` are comments
 - Blank lines are ignored
-- Scoped packages work: `@babel/core@2024-01-01`
+- Scoped packages work: `@babel/core@^7.20.0`
 
 ## Allowlist Format
 

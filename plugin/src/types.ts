@@ -17,14 +17,14 @@ export interface VintagePluginConfig {
 }
 
 /**
- * A rule to block a specific version
+ * A rule to block a specific version or semver range
  */
 export interface VersionDenylistRule {
   /** Package name (e.g., "lodash" or "@babel/core") */
   package: string;
   type: 'version';
-  /** Specific version to block */
-  version: string;
+  /** Version or semver range to block (e.g., "4.17.20", "^4.17.0", ">=4.17.20") */
+  range: string;
 }
 
 /**

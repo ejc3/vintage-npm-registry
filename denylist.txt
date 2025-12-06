@@ -5,17 +5,30 @@
 # Changes to this file are automatically detected (hot reload via polling).
 #
 # Format:
-#   package@version     - Block a specific version
-#   package@YYYY-MM-DD  - Block all versions published after this date
+#   package@version      - Block a specific version
+#   package@^version     - Caret range: block same major, >= specified
+#   package@~version     - Tilde range: block same minor, >= specified
+#   package@>=version    - Comparison: block >= specified version
+#   package@<version     - Comparison: block < specified version
+#   package@<=version    - Comparison: block <= specified version
+#   package@version.x    - X-range: block any version in range
+#   package@YYYY-MM-DD   - Block all versions published after this date
 #
 # Examples:
 #   lodash@4.17.20                    # Block specific version
 #   event-stream@3.3.6                # Block compromised version
+#   lodash@^4.17.0                    # Block 4.17.0, 4.17.1, ... 4.x.x
+#   react@~18.2.0                     # Block 18.2.0, 18.2.1, ... (same minor)
+#   axios@>=2.0.0                     # Block 2.0.0 and all above
+#   express@4.18.x                    # Block all 4.18.x versions
 #   react@2024-01-01                  # No React versions after Jan 1, 2024
 #   @babel/core@2024-06-15T00:00:00Z  # Full ISO timestamp also works
 #
-# Lines starting with # are comments
-# Blank lines are ignored
+# Note:
+# - Supports all semver range syntax (see https://github.com/npm/node-semver)
+# - Denylist takes precedence over allowlist
+# - Lines starting with # are comments
+# - Blank lines are ignored
 # =====================================
 
 # Add your denylist rules below:

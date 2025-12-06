@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'fs';
+import semver from 'semver';
 import type { DenylistRule } from './types';
 import { parsePackageValue, looksLikeDate, parseFileContent } from './parse-utils';
 
@@ -33,10 +34,14 @@ export function parseDenylistLine(line: string): DenylistRule | null {
       cutoffDate: date,
     };
   } else {
+    // Validate as semver version or range
+    if (!semver.valid(value) && !semver.validRange(value)) {
+      return null;
+    }
     return {
       package: packageName,
       type: 'version',
-      version: value,
+      range: value,
     };
   }
 }

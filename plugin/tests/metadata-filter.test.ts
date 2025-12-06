@@ -3,6 +3,7 @@ import {
   getEarliestCutoff,
   filterVersionsByDate,
   removeBlockedVersions,
+  addAllowedVersions,
   findLatestVersion,
   findLatestStableVersion,
   fixDistTags,
@@ -112,6 +113,60 @@ describe('removeBlockedVersions', () => {
     const blocked = new Set(['4.0.0']);
     const result = removeBlockedVersions(versions, blocked);
     expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0', '3.0.0']);
+  });
+});
+
+describe('addAllowedVersions', () => {
+  const originalVersions = {
+    '1.0.0': makeManifest('1.0.0'),
+    '2.0.0': makeManifest('2.0.0'),
+    '3.0.0': makeManifest('3.0.0'),
+  };
+
+  it('adds allowed version back to filtered set', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    const allowed = new Set(['3.0.0']);
+    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0']);
+  });
+
+  it('adds multiple allowed versions', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    const allowed = new Set(['2.0.0', '3.0.0']);
+    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0', '3.0.0']);
+  });
+
+  it('does not add version that does not exist in original', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    const allowed = new Set(['4.0.0']);
+    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    expect(Object.keys(result)).toEqual(['1.0.0']);
+  });
+
+  it('does not duplicate already existing version', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+      '2.0.0': makeManifest('2.0.0'),
+    };
+    const allowed = new Set(['2.0.0']);
+    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0']);
+  });
+
+  it('handles empty allowed set', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    const allowed = new Set<string>();
+    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    expect(Object.keys(result)).toEqual(['1.0.0']);
   });
 });
 
@@ -272,5 +327,94 @@ describe('filterPackageMetadata', () => {
       ],
     });
     expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '3.0.0']);
+  });
+
+  it('applies version allowlist to bypass date filtering', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
+      ],
+    });
+    // 1.0.0 is before cutoff, 3.0.0 is explicitly allowed
+    expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '3.0.0']);
+  });
+
+  it('allowlist works with per-package date cutoff', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      denylistRules: [
+        { package: 'test-package', type: 'date', cutoffDate: new Date('2024-01-01') },
+        { package: 'test-package', type: 'allowlist', version: '2.0.0' },
+      ],
+    });
+    // 1.0.0 is before cutoff, 2.0.0 is explicitly allowed
+    expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0']);
+  });
+
+  it('denylist takes precedence over allowlist', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
+        { package: 'test-package', type: 'version', version: '3.0.0' },
+      ],
+    });
+    // 3.0.0 is allowed but also blocked - block wins
+    expect(Object.keys(result.versions)).toEqual(['1.0.0']);
+  });
+
+  it('allowlist does not add non-existent versions', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'test-package', type: 'allowlist', version: '99.0.0' },
+      ],
+    });
+    // Only 1.0.0 remains, 99.0.0 doesn't exist in original
+    expect(Object.keys(result.versions)).toEqual(['1.0.0']);
+  });
+
+  it('allowlist for other package is ignored', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'other-package', type: 'allowlist', version: '3.0.0' },
+      ],
+    });
+    // Allowlist is for different package, should not affect test-package
+    expect(Object.keys(result.versions)).toEqual(['1.0.0']);
+  });
+
+  it('preserves time metadata for allowlisted versions', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
+      ],
+    });
+    expect(result.time).toEqual({
+      created: '2023-01-01T00:00:00.000Z',
+      modified: '2024-06-01T00:00:00.000Z',
+      '1.0.0': '2023-01-01T00:00:00.000Z',
+      '3.0.0': '2024-06-01T00:00:00.000Z',
+    });
+  });
+
+  it('fixes dist-tags when allowlisted version is latest', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'test-package', type: 'allowlist', version: '3.0.0' },
+      ],
+    });
+    // Original dist-tags.latest was 3.0.0, which is now allowed
+    expect(result['dist-tags'].latest).toBe('3.0.0');
   });
 });

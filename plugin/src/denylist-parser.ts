@@ -22,6 +22,9 @@ function looksLikeDate(value: string): boolean {
 /**
  * Parse a single line from the denylist file
  * Returns null if the line should be skipped (comment, blank, invalid)
+ *
+ * Supports allowlist entries with + prefix:
+ *   +package@version  -> Allowlist specific version (bypasses date filtering)
  */
 export function parseDenylistLine(line: string): DenylistRule | null {
   const trimmed = line.trim();
@@ -31,9 +34,13 @@ export function parseDenylistLine(line: string): DenylistRule | null {
     return null;
   }
 
+  // Check for allowlist prefix
+  const isAllowlist = trimmed.startsWith('+');
+  const content = isAllowlist ? trimmed.slice(1) : trimmed;
+
   // Find the last @ that separates package name from version/date
   // This handles scoped packages like @babel/core@2024-01-01
-  const lastAtIndex = trimmed.lastIndexOf('@');
+  const lastAtIndex = content.lastIndexOf('@');
 
   // Must have @ and it can't be at position 0 (that would be @scope with no version)
   // For scoped packages, first @ is at position 0, so lastAtIndex must be > 0
@@ -41,11 +48,24 @@ export function parseDenylistLine(line: string): DenylistRule | null {
     return null;
   }
 
-  const packageName = trimmed.slice(0, lastAtIndex);
-  const value = trimmed.slice(lastAtIndex + 1);
+  const packageName = content.slice(0, lastAtIndex);
+  const value = content.slice(lastAtIndex + 1);
 
   if (!packageName || !value) {
     return null;
+  }
+
+  // Allowlist entries must be version-based (not date-based)
+  if (isAllowlist) {
+    // Allowlist with date doesn't make sense - reject it
+    if (looksLikeDate(value)) {
+      return null;
+    }
+    return {
+      package: packageName,
+      type: 'allowlist',
+      version: value,
+    };
   }
 
   // Determine if this is a date or version rule

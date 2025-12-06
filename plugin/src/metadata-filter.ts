@@ -76,6 +76,27 @@ export function removeBlockedVersions(
 }
 
 /**
+ * Add explicitly allowed versions back (from original metadata)
+ * This allows specific versions to bypass date filtering
+ */
+export function addAllowedVersions(
+  filteredVersions: Record<string, VersionManifest>,
+  originalVersions: Record<string, VersionManifest>,
+  allowedVersions: Set<string>
+): Record<string, VersionManifest> {
+  const result = { ...filteredVersions };
+
+  for (const version of allowedVersions) {
+    // Only add if the version exists in the original metadata
+    if (originalVersions[version] && !result[version]) {
+      result[version] = originalVersions[version];
+    }
+  }
+
+  return result;
+}
+
+/**
  * Find the latest version from a list of versions using semver
  */
 export function findLatestVersion(versions: string[]): string | undefined {
@@ -175,6 +196,13 @@ export function filterPackageMetadata(
       .map((r) => r.version)
   );
 
+  // Collect allowed versions (bypass date filtering)
+  const allowedVersions = new Set(
+    packageRules
+      .filter((r): r is DenylistRule & { type: 'allowlist' } => r.type === 'allowlist')
+      .map((r) => r.version)
+  );
+
   // Find per-package date cutoff (use earliest if multiple)
   let packageDateCutoff: Date | undefined;
   for (const rule of packageRules) {
@@ -200,7 +228,16 @@ export function filterPackageMetadata(
     );
   }
 
-  // Remove explicitly blocked versions
+  // Add back explicitly allowed versions (bypass date filtering)
+  if (allowedVersions.size > 0) {
+    filteredVersions = addAllowedVersions(
+      filteredVersions,
+      metadata.versions,
+      allowedVersions
+    );
+  }
+
+  // Remove explicitly blocked versions (takes precedence over allowlist)
   if (blockedVersions.size > 0) {
     filteredVersions = removeBlockedVersions(filteredVersions, blockedVersions);
   }

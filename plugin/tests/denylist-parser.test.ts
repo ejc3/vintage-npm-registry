@@ -68,6 +68,49 @@ describe('parseDenylistLine', () => {
     });
   });
 
+  describe('allowlist rules', () => {
+    it('parses simple +package@version', () => {
+      const result = parseDenylistLine('+lodash@4.17.21');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'allowlist',
+        version: '4.17.21',
+      });
+    });
+
+    it('parses scoped +package@version', () => {
+      const result = parseDenylistLine('+@babel/core@7.24.0');
+      expect(result).toEqual({
+        package: '@babel/core',
+        type: 'allowlist',
+        version: '7.24.0',
+      });
+    });
+
+    it('parses prerelease allowlist versions', () => {
+      const result = parseDenylistLine('+react@19.0.0-rc.1');
+      expect(result).toEqual({
+        package: 'react',
+        type: 'allowlist',
+        version: '19.0.0-rc.1',
+      });
+    });
+
+    it('rejects allowlist with date (invalid)', () => {
+      // Allowlist with date doesn't make sense
+      expect(parseDenylistLine('+lodash@2024-01-01')).toBeNull();
+    });
+
+    it('handles whitespace with allowlist prefix', () => {
+      const result = parseDenylistLine('  +lodash@4.17.21  ');
+      expect(result).toEqual({
+        package: 'lodash',
+        type: 'allowlist',
+        version: '4.17.21',
+      });
+    });
+  });
+
   describe('invalid lines', () => {
     it('returns null for empty line', () => {
       expect(parseDenylistLine('')).toBeNull();
@@ -114,6 +157,30 @@ react@2024-01-01
     const result = parseDenylistContent(content);
     expect(result.rules).toHaveLength(3);
     expect(result.errors).toHaveLength(0);
+  });
+
+  it('parses mix of denylist and allowlist entries', () => {
+    const content = `
+# Block old versions
+lodash@4.17.20
+react@2024-01-01
+
+# Allow specific newer versions
++lodash@4.17.21
++@babel/core@7.24.0
+`;
+    const result = parseDenylistContent(content);
+    expect(result.rules).toHaveLength(4);
+    expect(result.errors).toHaveLength(0);
+
+    // Check rule types
+    const allowlistRules = result.rules.filter(r => r.type === 'allowlist');
+    expect(allowlistRules).toHaveLength(2);
+    expect(allowlistRules[0]).toEqual({
+      package: 'lodash',
+      type: 'allowlist',
+      version: '4.17.21',
+    });
   });
 
   it('handles comments and blank lines', () => {

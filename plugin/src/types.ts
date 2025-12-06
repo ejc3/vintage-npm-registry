@@ -44,14 +44,14 @@ export interface DateDenylistRule {
 export type DenylistRule = VersionDenylistRule | DateDenylistRule;
 
 /**
- * A rule to explicitly allow a specific version (bypasses date filtering)
+ * A rule to explicitly allow a specific version or range (bypasses date filtering)
  * Parsed from allowlist.txt file
  */
 export interface AllowlistRule {
   /** Package name (e.g., "lodash" or "@babel/core") */
   package: string;
-  /** Specific version to allow */
-  version: string;
+  /** Version or semver range to allow (e.g., "4.17.21", "^4.17.0", ">=4.17.20") */
+  range: string;
 }
 
 /**

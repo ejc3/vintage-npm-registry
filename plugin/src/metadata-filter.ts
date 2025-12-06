@@ -77,19 +77,33 @@ export function removeBlockedVersions(
 
 /**
  * Add explicitly allowed versions back (from original metadata)
- * This allows specific versions to bypass date filtering
+ * This allows specific versions or ranges to bypass date filtering
+ * Supports semver ranges like ^4.17.0, ~4.17.0, >=4.17.20
  */
 export function addAllowedVersions(
   filteredVersions: Record<string, VersionManifest>,
   originalVersions: Record<string, VersionManifest>,
-  allowedVersions: Set<string>
+  allowlistRules: AllowlistRule[]
 ): Record<string, VersionManifest> {
+  if (allowlistRules.length === 0) {
+    return filteredVersions;
+  }
+
   const result = { ...filteredVersions };
 
-  for (const version of allowedVersions) {
-    // Only add if the version exists in the original metadata
-    if (originalVersions[version] && !result[version]) {
-      result[version] = originalVersions[version];
+  // Check each original version against allowlist rules
+  for (const [version, manifest] of Object.entries(originalVersions)) {
+    // Skip if already in result
+    if (result[version]) {
+      continue;
+    }
+
+    // Check if this version matches any allowlist rule
+    for (const rule of allowlistRules) {
+      if (semver.satisfies(version, rule.range)) {
+        result[version] = manifest;
+        break; // Version matched, no need to check more rules
+      }
     }
   }
 
@@ -197,12 +211,8 @@ export function filterPackageMetadata(
       .map((r) => r.version)
   );
 
-  // Collect allowed versions from allowlist (bypass date filtering)
-  const allowedVersions = new Set(
-    allowlistRules
-      .filter((r) => r.package === metadata.name)
-      .map((r) => r.version)
-  );
+  // Collect allowlist rules for this package (supports semver ranges)
+  const packageAllowlistRules = allowlistRules.filter((r) => r.package === metadata.name);
 
   // Find per-package date cutoff (use earliest if multiple)
   let packageDateCutoff: Date | undefined;
@@ -230,11 +240,11 @@ export function filterPackageMetadata(
   }
 
   // Add back explicitly allowed versions (bypass date filtering)
-  if (allowedVersions.size > 0) {
+  if (packageAllowlistRules.length > 0) {
     filteredVersions = addAllowedVersions(
       filteredVersions,
       metadata.versions,
-      allowedVersions
+      packageAllowlistRules
     );
   }
 

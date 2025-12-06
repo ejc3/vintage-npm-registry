@@ -54,16 +54,22 @@ Changes are detected automatically (hot reload) - no restart needed.
 
 ### Allowlist File
 
-Edit `allowlist.txt` to allow specific versions that bypass date filtering:
+Edit `allowlist.txt` to allow specific versions or version ranges that bypass date filtering:
 
 ```txt
 # Allow specific newer versions despite global/per-package cutoff dates
 lodash@4.17.21
 react@18.3.0
 @babel/core@7.24.0
+
+# Allow version ranges using semver syntax
+lodash@^4.17.20      # caret range: 4.17.20 and above (same major)
+react@~18.2.0        # tilde range: 18.2.x only
+axios@>=1.6.0        # comparison range: 1.6.0 and above
+express@4.18.x       # x-range: all 4.18.x versions
 ```
 
-This is useful when you have a global cutoff date but need specific newer versions for security patches or critical features.
+This is useful when you have a global cutoff date but need specific newer versions for security patches or critical features. Semver ranges let you allow a range of versions without listing each one individually.
 
 ## Denylist Format
 
@@ -81,12 +87,17 @@ This is useful when you have a global cutoff date but need specific newer versio
 
 | Format | Example | Effect |
 |--------|---------|--------|
-| `package@version` | `lodash@4.17.21` | Allow specific version (bypasses date filtering) |
+| `package@version` | `lodash@4.17.21` | Allow specific version |
+| `package@^version` | `lodash@^4.17.20` | Caret range: same major, >= specified |
+| `package@~version` | `react@~18.2.0` | Tilde range: same minor, >= specified |
+| `package@>=version` | `axios@>=1.6.0` | Comparison: >= specified version |
+| `package@version.x` | `express@4.18.x` | X-range: match any in range |
 
-- Only version entries are supported (not date entries)
+- Supports all [semver range syntax](https://github.com/npm/node-semver#ranges)
+- Only version/range entries are supported (not date entries)
 - Allowlist is applied after date filtering
 - Denylist takes precedence (a version both allowed and blocked will be blocked)
-- Scoped packages work: `@babel/core@7.24.0`
+- Scoped packages work: `@babel/core@^7.20.0`
 
 ## Commands
 

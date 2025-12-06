@@ -14,7 +14,7 @@ describe('parseAllowlistLine', () => {
     const result = parseAllowlistLine('lodash@4.17.21');
     expect(result).toEqual({
       package: 'lodash',
-      version: '4.17.21',
+      range: '4.17.21',
     });
   });
 
@@ -22,7 +22,7 @@ describe('parseAllowlistLine', () => {
     const result = parseAllowlistLine('@babel/core@7.24.0');
     expect(result).toEqual({
       package: '@babel/core',
-      version: '7.24.0',
+      range: '7.24.0',
     });
   });
 
@@ -30,15 +30,55 @@ describe('parseAllowlistLine', () => {
     const result = parseAllowlistLine('react@19.0.0-rc.1');
     expect(result).toEqual({
       package: 'react',
-      version: '19.0.0-rc.1',
+      range: '19.0.0-rc.1',
+    });
+  });
+
+  it('parses caret range', () => {
+    const result = parseAllowlistLine('lodash@^4.17.0');
+    expect(result).toEqual({
+      package: 'lodash',
+      range: '^4.17.0',
+    });
+  });
+
+  it('parses tilde range', () => {
+    const result = parseAllowlistLine('lodash@~4.17.0');
+    expect(result).toEqual({
+      package: 'lodash',
+      range: '~4.17.0',
+    });
+  });
+
+  it('parses comparison range', () => {
+    const result = parseAllowlistLine('lodash@>=4.17.20');
+    expect(result).toEqual({
+      package: 'lodash',
+      range: '>=4.17.20',
+    });
+  });
+
+  it('parses x-range', () => {
+    const result = parseAllowlistLine('lodash@4.17.x');
+    expect(result).toEqual({
+      package: 'lodash',
+      range: '4.17.x',
+    });
+  });
+
+  it('parses hyphen range', () => {
+    const result = parseAllowlistLine('lodash@4.17.0 - 4.17.21');
+    expect(result).toEqual({
+      package: 'lodash',
+      range: '4.17.0 - 4.17.21',
     });
   });
 
   it('handles whitespace', () => {
-    const result = parseAllowlistLine('  lodash@4.17.21  ');
+    const result = parseAllowlistLine('  lodash@^4.17.0  ');
     expect(result).toEqual({
       package: 'lodash',
-      version: '4.17.21',
+      range: '^4.17.0',
     });
   });
 
@@ -64,6 +104,11 @@ describe('parseAllowlistLine', () => {
   it('returns null for @ at start only (scoped package without version)', () => {
     expect(parseAllowlistLine('@babel/core')).toBeNull();
   });
+
+  it('returns null for invalid semver range', () => {
+    expect(parseAllowlistLine('lodash@not-a-version')).toBeNull();
+    expect(parseAllowlistLine('lodash@abc.def.ghi')).toBeNull();
+  });
 });
 
 describe('parseAllowlistContent', () => {
@@ -76,7 +121,21 @@ react@18.3.0
     const result = parseAllowlistContent(content);
     expect(result.rules).toHaveLength(3);
     expect(result.errors).toHaveLength(0);
-    expect(result.rules[0]).toEqual({ package: 'lodash', version: '4.17.21' });
+    expect(result.rules[0]).toEqual({ package: 'lodash', range: '4.17.21' });
+  });
+
+  it('parses semver ranges', () => {
+    const content = `
+lodash@^4.17.0
+react@~18.0.0
+@babel/core@>=7.20.0
+`;
+    const result = parseAllowlistContent(content);
+    expect(result.rules).toHaveLength(3);
+    expect(result.errors).toHaveLength(0);
+    expect(result.rules[0]).toEqual({ package: 'lodash', range: '^4.17.0' });
+    expect(result.rules[1]).toEqual({ package: 'react', range: '~18.0.0' });
+    expect(result.rules[2]).toEqual({ package: '@babel/core', range: '>=7.20.0' });
   });
 
   it('handles comments and blank lines', () => {
@@ -126,11 +185,11 @@ describe('parseAllowlistFile', () => {
     const filePath = join(tempDir, 'allowlist.txt');
 
     try {
-      writeFileSync(filePath, 'lodash@4.17.21\nreact@18.3.0\n');
+      writeFileSync(filePath, 'lodash@4.17.21\nreact@^18.0.0\n');
       const result = parseAllowlistFile(filePath);
       expect(result.rules).toEqual([
-        { package: 'lodash', version: '4.17.21' },
-        { package: 'react', version: '18.3.0' },
+        { package: 'lodash', range: '4.17.21' },
+        { package: 'react', range: '^18.0.0' },
       ]);
       expect(result.errors).toHaveLength(0);
     } finally {

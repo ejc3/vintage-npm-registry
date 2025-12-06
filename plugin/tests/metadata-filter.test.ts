@@ -121,32 +121,77 @@ describe('addAllowedVersions', () => {
     '1.0.0': makeManifest('1.0.0'),
     '2.0.0': makeManifest('2.0.0'),
     '3.0.0': makeManifest('3.0.0'),
+    '3.1.0': makeManifest('3.1.0'),
+    '4.0.0-beta.1': makeManifest('4.0.0-beta.1'),
   };
 
-  it('adds allowed version back to filtered set', () => {
+  it('adds allowed version back to filtered set (exact version)', () => {
     const filteredVersions = {
       '1.0.0': makeManifest('1.0.0'),
     };
-    const allowed = new Set(['3.0.0']);
-    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    const rules = [{ package: 'test-package', range: '3.0.0' }];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
     expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0']);
   });
 
-  it('adds multiple allowed versions', () => {
+  it('adds multiple allowed versions with exact matches', () => {
     const filteredVersions = {
       '1.0.0': makeManifest('1.0.0'),
     };
-    const allowed = new Set(['2.0.0', '3.0.0']);
-    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    const rules = [
+      { package: 'test-package', range: '2.0.0' },
+      { package: 'test-package', range: '3.0.0' },
+    ];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
     expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0', '3.0.0']);
+  });
+
+  it('supports caret range (^)', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    // ^3.0.0 matches 3.0.0 and 3.1.0 (same major)
+    const rules = [{ package: 'test-package', range: '^3.0.0' }];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0', '3.1.0']);
+  });
+
+  it('supports tilde range (~)', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    // ~3.0.0 matches 3.0.x only
+    const rules = [{ package: 'test-package', range: '~3.0.0' }];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0']);
+  });
+
+  it('supports comparison range (>=)', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    // >=3.0.0 matches 3.0.0, 3.1.0 (but not prerelease by default)
+    const rules = [{ package: 'test-package', range: '>=3.0.0' }];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0', '3.1.0']);
+  });
+
+  it('supports x-range', () => {
+    const filteredVersions = {
+      '1.0.0': makeManifest('1.0.0'),
+    };
+    // 3.x matches all 3.x versions
+    const rules = [{ package: 'test-package', range: '3.x' }];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
+    expect(Object.keys(result).sort()).toEqual(['1.0.0', '3.0.0', '3.1.0']);
   });
 
   it('does not add version that does not exist in original', () => {
     const filteredVersions = {
       '1.0.0': makeManifest('1.0.0'),
     };
-    const allowed = new Set(['4.0.0']);
-    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    const rules = [{ package: 'test-package', range: '5.0.0' }];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
     expect(Object.keys(result)).toEqual(['1.0.0']);
   });
 
@@ -155,17 +200,17 @@ describe('addAllowedVersions', () => {
       '1.0.0': makeManifest('1.0.0'),
       '2.0.0': makeManifest('2.0.0'),
     };
-    const allowed = new Set(['2.0.0']);
-    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    const rules = [{ package: 'test-package', range: '2.0.0' }];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
     expect(Object.keys(result).sort()).toEqual(['1.0.0', '2.0.0']);
   });
 
-  it('handles empty allowed set', () => {
+  it('handles empty rules array', () => {
     const filteredVersions = {
       '1.0.0': makeManifest('1.0.0'),
     };
-    const allowed = new Set<string>();
-    const result = addAllowedVersions(filteredVersions, originalVersions, allowed);
+    const rules: Array<{ package: string; range: string }> = [];
+    const result = addAllowedVersions(filteredVersions, originalVersions, rules);
     expect(Object.keys(result)).toEqual(['1.0.0']);
   });
 });
@@ -342,7 +387,7 @@ describe('filterPackageMetadata', () => {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [],
       allowlistRules: [
-        { package: 'test-package', version: '3.0.0' },
+        { package: 'test-package', range: '3.0.0' },
       ],
     });
     // 1.0.0 is before cutoff, 3.0.0 is explicitly allowed
@@ -356,11 +401,80 @@ describe('filterPackageMetadata', () => {
         { package: 'test-package', type: 'date', cutoffDate: new Date('2024-01-01') },
       ],
       allowlistRules: [
-        { package: 'test-package', version: '2.0.0' },
+        { package: 'test-package', range: '2.0.0' },
       ],
     });
     // 1.0.0 is before cutoff, 2.0.0 is explicitly allowed
     expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0']);
+  });
+
+  it('allowlist supports semver caret range', () => {
+    const metadata: PackageMetadata = {
+      name: 'test-package',
+      versions: {
+        '1.0.0': makeManifest('1.0.0'),
+        '2.0.0': makeManifest('2.0.0'),
+        '2.1.0': makeManifest('2.1.0'),
+        '3.0.0': makeManifest('3.0.0'),
+      },
+      'dist-tags': { latest: '3.0.0' },
+      time: {
+        '1.0.0': '2023-01-01T00:00:00.000Z',
+        '2.0.0': '2024-01-15T00:00:00.000Z',
+        '2.1.0': '2024-02-15T00:00:00.000Z',
+        '3.0.0': '2024-06-01T00:00:00.000Z',
+      },
+    };
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'test-package', range: '^2.0.0' },
+      ],
+    });
+    // 1.0.0 is before cutoff, ^2.0.0 matches 2.0.0 and 2.1.0
+    expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0', '2.1.0']);
+  });
+
+  it('allowlist supports semver tilde range', () => {
+    const metadata: PackageMetadata = {
+      name: 'test-package',
+      versions: {
+        '1.0.0': makeManifest('1.0.0'),
+        '2.0.0': makeManifest('2.0.0'),
+        '2.0.1': makeManifest('2.0.1'),
+        '2.1.0': makeManifest('2.1.0'),
+      },
+      'dist-tags': { latest: '2.1.0' },
+      time: {
+        '1.0.0': '2023-01-01T00:00:00.000Z',
+        '2.0.0': '2024-01-15T00:00:00.000Z',
+        '2.0.1': '2024-02-01T00:00:00.000Z',
+        '2.1.0': '2024-06-01T00:00:00.000Z',
+      },
+    };
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'test-package', range: '~2.0.0' },
+      ],
+    });
+    // 1.0.0 is before cutoff, ~2.0.0 matches 2.0.0 and 2.0.1 (same minor)
+    expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0', '2.0.1']);
+  });
+
+  it('allowlist supports comparison range (>=)', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [],
+      allowlistRules: [
+        { package: 'test-package', range: '>=2.0.0' },
+      ],
+    });
+    // 1.0.0 is before cutoff, >=2.0.0 matches 2.0.0 and 3.0.0
+    expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0', '3.0.0']);
   });
 
   it('denylist takes precedence over allowlist', () => {
@@ -371,11 +485,26 @@ describe('filterPackageMetadata', () => {
         { package: 'test-package', type: 'version', version: '3.0.0' },
       ],
       allowlistRules: [
-        { package: 'test-package', version: '3.0.0' },
+        { package: 'test-package', range: '3.0.0' },
       ],
     });
     // 3.0.0 is allowed but also blocked - block wins
     expect(Object.keys(result.versions)).toEqual(['1.0.0']);
+  });
+
+  it('denylist takes precedence over allowlist range', () => {
+    const metadata = createMetadata();
+    const result = filterPackageMetadata(metadata, {
+      globalCutoff: new Date('2024-01-01'),
+      denylistRules: [
+        { package: 'test-package', type: 'version', version: '3.0.0' },
+      ],
+      allowlistRules: [
+        { package: 'test-package', range: '^2.0.0' },
+      ],
+    });
+    // ^2.0.0 would match 2.0.0 and 3.0.0, but 3.0.0 is blocked
+    expect(Object.keys(result.versions).sort()).toEqual(['1.0.0', '2.0.0']);
   });
 
   it('allowlist does not add non-existent versions', () => {
@@ -384,7 +513,7 @@ describe('filterPackageMetadata', () => {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [],
       allowlistRules: [
-        { package: 'test-package', version: '99.0.0' },
+        { package: 'test-package', range: '99.0.0' },
       ],
     });
     // Only 1.0.0 remains, 99.0.0 doesn't exist in original
@@ -397,7 +526,7 @@ describe('filterPackageMetadata', () => {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [],
       allowlistRules: [
-        { package: 'other-package', version: '3.0.0' },
+        { package: 'other-package', range: '3.0.0' },
       ],
     });
     // Allowlist is for different package, should not affect test-package
@@ -410,7 +539,7 @@ describe('filterPackageMetadata', () => {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [],
       allowlistRules: [
-        { package: 'test-package', version: '3.0.0' },
+        { package: 'test-package', range: '3.0.0' },
       ],
     });
     expect(result.time).toEqual({
@@ -427,7 +556,7 @@ describe('filterPackageMetadata', () => {
       globalCutoff: new Date('2024-01-01'),
       denylistRules: [],
       allowlistRules: [
-        { package: 'test-package', version: '3.0.0' },
+        { package: 'test-package', range: '3.0.0' },
       ],
     });
     // Original dist-tags.latest was 3.0.0, which is now allowed

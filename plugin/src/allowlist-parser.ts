@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'fs';
+import semver from 'semver';
 import type { AllowlistRule } from './types';
 import { parsePackageValue, looksLikeDate, parseFileContent } from './parse-utils';
 
@@ -11,7 +12,13 @@ export class AllowlistFileNotFoundError extends Error {
 
 /**
  * Parse a single line from the allowlist file
- * Format: package@version (e.g., lodash@4.17.21, @babel/core@7.24.0)
+ * Format: package@version or package@range
+ * Examples:
+ *   lodash@4.17.21       - exact version
+ *   lodash@^4.17.0       - caret range
+ *   lodash@~4.17.0       - tilde range
+ *   lodash@>=4.17.20     - comparison range
+ *   lodash@4.17.x        - x-range
  * Returns null if the line should be skipped (comment, blank, invalid)
  */
 export function parseAllowlistLine(line: string): AllowlistRule | null {
@@ -22,14 +29,19 @@ export function parseAllowlistLine(line: string): AllowlistRule | null {
 
   const { package: packageName, value } = parsed;
 
-  // Reject date-like values (allowlist should only be specific versions)
+  // Reject date-like values (allowlist should only be versions/ranges)
   if (looksLikeDate(value)) {
+    return null;
+  }
+
+  // Validate that it's a valid semver version or range
+  if (!semver.valid(value) && !semver.validRange(value)) {
     return null;
   }
 
   return {
     package: packageName,
-    version: value,
+    range: value,
   };
 }
 

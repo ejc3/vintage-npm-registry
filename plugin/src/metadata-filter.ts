@@ -1,5 +1,5 @@
 import semver from 'semver';
-import type { DenylistRule, PackageMetadata, VersionManifest } from './types';
+import type { DenylistRule, AllowlistRule, PackageMetadata, VersionManifest } from './types';
 
 /**
  * Get the earliest (most restrictive) cutoff date from two optional dates
@@ -58,21 +58,62 @@ export function filterVersionsByDate(
 }
 
 /**
- * Remove specific blocked versions
+ * Remove blocked versions matching semver ranges
  */
 export function removeBlockedVersions(
   versions: Record<string, VersionManifest>,
-  blockedVersions: Set<string>
+  blockedRanges: string[]
 ): Record<string, VersionManifest> {
+  if (blockedRanges.length === 0) {
+    return versions;
+  }
+
   const filtered: Record<string, VersionManifest> = {};
 
   for (const [version, manifest] of Object.entries(versions)) {
-    if (!blockedVersions.has(version)) {
+    // Check if this version matches any blocked range
+    const isBlocked = blockedRanges.some((range) => semver.satisfies(version, range));
+    if (!isBlocked) {
       filtered[version] = manifest;
     }
   }
 
   return filtered;
+}
+
+/**
+ * Add explicitly allowed versions back (from original metadata)
+ * This allows specific versions or ranges to bypass date filtering
+ * Supports semver ranges like ^4.17.0, ~4.17.0, >=4.17.20
+ */
+export function addAllowedVersions(
+  filteredVersions: Record<string, VersionManifest>,
+  originalVersions: Record<string, VersionManifest>,
+  allowlistRules: AllowlistRule[]
+): Record<string, VersionManifest> {
+  if (allowlistRules.length === 0) {
+    return filteredVersions;
+  }
+
+  const result = { ...filteredVersions };
+
+  // Check each original version against allowlist rules
+  for (const [version, manifest] of Object.entries(originalVersions)) {
+    // Skip if already in result
+    if (result[version]) {
+      continue;
+    }
+
+    // Check if this version matches any allowlist rule
+    for (const rule of allowlistRules) {
+      if (semver.satisfies(version, rule.range)) {
+        result[version] = manifest;
+        break; // Version matched, no need to check more rules
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -154,6 +195,7 @@ export function fixDistTags(
 export interface FilterOptions {
   globalCutoff?: Date;
   denylistRules: DenylistRule[];
+  allowlistRules: AllowlistRule[];
 }
 
 /**
@@ -163,21 +205,22 @@ export function filterPackageMetadata(
   metadata: PackageMetadata,
   options: FilterOptions
 ): PackageMetadata {
-  const { globalCutoff, denylistRules } = options;
+  const { globalCutoff, denylistRules, allowlistRules } = options;
 
-  // Get rules for this specific package
-  const packageRules = denylistRules.filter((r) => r.package === metadata.name);
+  // Get denylist rules for this specific package
+  const packageDenylistRules = denylistRules.filter((r) => r.package === metadata.name);
 
-  // Collect blocked versions
-  const blockedVersions = new Set(
-    packageRules
-      .filter((r): r is DenylistRule & { type: 'version' } => r.type === 'version')
-      .map((r) => r.version)
-  );
+  // Collect blocked version ranges from denylist
+  const blockedRanges = packageDenylistRules
+    .filter((r): r is DenylistRule & { type: 'version' } => r.type === 'version')
+    .map((r) => r.range);
+
+  // Collect allowlist rules for this package (supports semver ranges)
+  const packageAllowlistRules = allowlistRules.filter((r) => r.package === metadata.name);
 
   // Find per-package date cutoff (use earliest if multiple)
   let packageDateCutoff: Date | undefined;
-  for (const rule of packageRules) {
+  for (const rule of packageDenylistRules) {
     if (rule.type === 'date') {
       if (!packageDateCutoff || rule.cutoffDate < packageDateCutoff) {
         packageDateCutoff = rule.cutoffDate;
@@ -200,9 +243,18 @@ export function filterPackageMetadata(
     );
   }
 
-  // Remove explicitly blocked versions
-  if (blockedVersions.size > 0) {
-    filteredVersions = removeBlockedVersions(filteredVersions, blockedVersions);
+  // Add back explicitly allowed versions (bypass date filtering)
+  if (packageAllowlistRules.length > 0) {
+    filteredVersions = addAllowedVersions(
+      filteredVersions,
+      metadata.versions,
+      packageAllowlistRules
+    );
+  }
+
+  // Remove explicitly blocked versions (takes precedence over allowlist)
+  if (blockedRanges.length > 0) {
+    filteredVersions = removeBlockedVersions(filteredVersions, blockedRanges);
   }
 
   // Fix dist-tags

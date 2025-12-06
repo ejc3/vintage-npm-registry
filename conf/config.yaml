@@ -61,8 +61,12 @@ filters:
     # Comment out or remove to disable global cutoff
     # global_cutoff: '2024-01-01T00:00:00.000Z'
 
-    # Path to denylist file for per-package rules
+    # Path to denylist file for per-package blocking rules
     denylist_file: /verdaccio/conf/denylist.txt
 
-    # Watch denylist file for changes (hot reload)
+    # Path to allowlist file for versions that bypass date filtering
+    # Comment out if not using allowlist
+    # allowlist_file: /verdaccio/conf/allowlist.txt
+
+    # Watch denylist/allowlist files for changes (hot reload)
     watch_denylist: true

@@ -1,0 +1,24 @@
+# Vintage NPM Registry - Allowlist
+#
+# Add package@version or package@range entries to allow specific versions
+# that bypass date filtering rules.
+#
+# Format:
+#   package@version      - Allow specific version
+#   package@^version     - Caret range: same major, >= specified
+#   package@~version     - Tilde range: same minor, >= specified
+#   package@>=version    - Comparison: >= specified version
+#   package@version.x    - X-range: match any in range
+#
+# Examples:
+#   lodash@4.17.21       - exact version
+#   lodash@^4.17.20      - allows 4.17.20, 4.17.21, etc.
+#   react@~18.2.0        - allows 18.2.0, 18.2.1, etc.
+#   axios@>=1.6.0        - allows 1.6.0 and above
+#   express@4.18.x       - allows all 4.18.x versions
+#   @babel/core@^7.20.0  - scoped package with range
+#
+# Note:
+# - Supports all semver range syntax (see https://github.com/npm/node-semver)
+# - Only version/range entries are supported (not date entries)
+# - Denylist takes precedence over allowlist

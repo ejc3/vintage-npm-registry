@@ -30,13 +30,15 @@ CONTAINER_NAME="vintage-npm-registry-test"
 IMAGE_NAME="vintage-npm-registry"
 REGISTRY_URL="http://localhost:4873"
 TEST_DENYLIST="./test-denylist.txt"
+TEST_ALLOWLIST="./test-allowlist.txt"
+TEST_CONFIG="./test-config.yaml"
 
 # Cleanup function
 cleanup() {
     echo -e "\n${YELLOW}Cleaning up...${NC}"
     podman stop "$CONTAINER_NAME" 2>/dev/null || true
     podman rm "$CONTAINER_NAME" 2>/dev/null || true
-    rm -f "$TEST_DENYLIST"
+    rm -f "$TEST_DENYLIST" "$TEST_ALLOWLIST" "$TEST_CONFIG"
 }
 
 # Run cleanup on exit
@@ -288,9 +290,215 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Test 10: Verify npm install works
+# Test 10: Test allowlist functionality
 # ----------------------------------------------------------------------------
-info "Test 10: Testing npm install..."
+info "Test 10: Testing allowlist to bypass date filtering..."
+
+# Stop current container to restart with allowlist config
+podman stop "$CONTAINER_NAME" 2>/dev/null || true
+podman rm "$CONTAINER_NAME" 2>/dev/null || true
+
+# Create test config with allowlist
+cat > "$TEST_CONFIG" << 'EOF'
+storage: /verdaccio/storage/data
+plugins: /verdaccio/plugins
+
+web:
+  title: Vintage NPM Registry Test
+
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    max_users: 1000
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: true
+
+packages:
+  '@*/*':
+    access: $all
+    publish: $authenticated
+    proxy: npmjs
+  '**':
+    access: $all
+    publish: $authenticated
+    proxy: npmjs
+
+listen: 0.0.0.0:4873
+log: { type: stdout, format: pretty, level: info }
+
+filters:
+  vintage:
+    denylist_file: /verdaccio/conf/denylist.txt
+    allowlist_file: /verdaccio/conf/allowlist.txt
+    watch_denylist: true
+EOF
+
+# Create denylist with date cutoff
+cat > "$TEST_DENYLIST" << 'EOF'
+# Test denylist - date cutoff
+lodash@2020-01-01
+EOF
+
+# Create allowlist to allow a specific version after the cutoff
+cat > "$TEST_ALLOWLIST" << 'EOF'
+# Test allowlist - allow specific version despite date cutoff
+lodash@4.17.21
+EOF
+
+# Start container with custom config and allowlist
+podman run -d \
+    --name "$CONTAINER_NAME" \
+    -p 4873:4873 \
+    -v "$PWD/$TEST_CONFIG:/verdaccio/conf/config.yaml:ro" \
+    -v "$PWD/$TEST_DENYLIST:/verdaccio/conf/denylist.txt:ro" \
+    -v "$PWD/$TEST_ALLOWLIST:/verdaccio/conf/allowlist.txt:ro" \
+    "$IMAGE_NAME" > /dev/null
+
+if wait_for_registry; then
+    pass "Registry restarted with allowlist config"
+else
+    fail "Registry failed to start with allowlist config"
+fi
+
+# 4.17.21 was published 2021-02-20, should be filtered by date cutoff
+# BUT it's in the allowlist, so should be available
+if version_exists "lodash" "4.17.21"; then
+    pass "lodash@4.17.21 is available (allowlisted despite date cutoff)"
+else
+    fail "lodash@4.17.21 should be available (in allowlist)"
+fi
+
+# 4.17.20 was published 2020-08-13, should be filtered (not in allowlist)
+if version_exists "lodash" "4.17.20"; then
+    fail "lodash@4.17.20 should be filtered (after date cutoff, not in allowlist)"
+else
+    pass "lodash@4.17.20 is filtered (after date cutoff, not in allowlist)"
+fi
+
+# 4.17.15 was published 2019-07-19, should be available (before cutoff)
+if version_exists "lodash" "4.17.15"; then
+    pass "lodash@4.17.15 is available (before date cutoff)"
+else
+    fail "lodash@4.17.15 should be available (before date cutoff)"
+fi
+
+# Verify latest tag points to the allowlisted version
+latest=$(get_latest_version "lodash")
+if [ "$latest" = "4.17.21" ]; then
+    pass "latest tag points to 4.17.21 (allowlisted version)"
+else
+    fail "latest tag should be 4.17.21 (allowlisted), got: $latest"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 11: Test allowlist with semver range
+# ----------------------------------------------------------------------------
+info "Test 11: Testing allowlist with semver range..."
+
+# Update allowlist to use a caret range
+cat > "$TEST_ALLOWLIST" << 'EOF'
+# Test allowlist - allow versions matching semver range
+lodash@^4.17.20
+EOF
+
+# Wait for hot reload
+sleep 4
+
+# 4.17.20 was published 2020-08-13, should match ^4.17.20
+if version_exists "lodash" "4.17.20"; then
+    pass "lodash@4.17.20 is available (matches ^4.17.20 range)"
+else
+    fail "lodash@4.17.20 should be available (matches ^4.17.20 range)"
+fi
+
+# 4.17.21 was published 2021-02-20, should also match ^4.17.20
+if version_exists "lodash" "4.17.21"; then
+    pass "lodash@4.17.21 is available (matches ^4.17.20 range)"
+else
+    fail "lodash@4.17.21 should be available (matches ^4.17.20 range)"
+fi
+
+# 4.17.16 was published 2020-07-08, does NOT match ^4.17.20 (less than 4.17.20)
+if version_exists "lodash" "4.17.16"; then
+    fail "lodash@4.17.16 should be filtered (after cutoff, doesn't match ^4.17.20)"
+else
+    pass "lodash@4.17.16 is filtered (after cutoff, doesn't match ^4.17.20)"
+fi
+
+# 4.17.15 was published 2019-07-19, should still be available (before cutoff)
+if version_exists "lodash" "4.17.15"; then
+    pass "lodash@4.17.15 is available (before date cutoff)"
+else
+    fail "lodash@4.17.15 should be available (before date cutoff)"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 12: Test denylist with semver range
+# ----------------------------------------------------------------------------
+info "Test 12: Testing denylist with semver range..."
+
+# Clear allowlist and set denylist with semver range
+cat > "$TEST_ALLOWLIST" << 'EOF'
+# Test allowlist - empty
+EOF
+
+cat > "$TEST_DENYLIST" << 'EOF'
+# Test denylist - block versions matching semver range
+lodash@^4.17.20
+EOF
+
+# Wait for hot reload
+sleep 4
+
+# 4.17.20 was published 2020-08-13, should be blocked by ^4.17.20
+if version_exists "lodash" "4.17.20"; then
+    fail "lodash@4.17.20 should be blocked (matches ^4.17.20 range)"
+else
+    pass "lodash@4.17.20 is blocked (matches ^4.17.20 range)"
+fi
+
+# 4.17.21 was published 2021-02-20, should also be blocked by ^4.17.20
+if version_exists "lodash" "4.17.21"; then
+    fail "lodash@4.17.21 should be blocked (matches ^4.17.20 range)"
+else
+    pass "lodash@4.17.21 is blocked (matches ^4.17.20 range)"
+fi
+
+# 4.17.15 was published 2019-07-19, should be available (doesn't match ^4.17.20)
+if version_exists "lodash" "4.17.15"; then
+    pass "lodash@4.17.15 is available (doesn't match ^4.17.20 range)"
+else
+    fail "lodash@4.17.15 should be available (doesn't match ^4.17.20 range)"
+fi
+
+# 4.17.16 was published 2020-07-08, should be available (doesn't match ^4.17.20)
+if version_exists "lodash" "4.17.16"; then
+    pass "lodash@4.17.16 is available (doesn't match ^4.17.20 range)"
+else
+    fail "lodash@4.17.16 should be available (doesn't match ^4.17.20 range)"
+fi
+
+# Verify latest tag points to highest unblocked version
+latest=$(get_latest_version "lodash")
+# With ^4.17.20 blocked, latest should be 4.17.19 or earlier available version
+if [ "$latest" = "4.17.19" ]; then
+    pass "latest tag points to 4.17.19 (highest unblocked version)"
+else
+    # It might be a different version depending on what's available
+    if version_exists "lodash" "$latest" && ! echo "$latest" | grep -qE "^4\.17\.(2[0-9]|[3-9][0-9])"; then
+        pass "latest tag points to $latest (an unblocked version)"
+    else
+        fail "latest tag should point to an unblocked version, got: $latest"
+    fi
+fi
+
+# ----------------------------------------------------------------------------
+# Test 13: Verify npm install works
+# ----------------------------------------------------------------------------
+info "Test 13: Testing npm install..."
 
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
@@ -327,6 +535,9 @@ echo "  • Version-specific blocking"
 echo "  • Scoped package filtering"
 echo "  • Combined filtering rules"
 echo "  • Hot reload of denylist changes"
+echo "  • Allowlist to bypass date filtering"
+echo "  • Allowlist with semver ranges"
+echo "  • Denylist with semver ranges"
 echo "  • dist-tags update after filtering"
 echo "  • npm install compatibility"
 echo ""

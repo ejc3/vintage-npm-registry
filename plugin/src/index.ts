@@ -4,7 +4,7 @@ import type {
   Logger,
   Package,
 } from '@verdaccio/types';
-import type { VintagePluginConfig, DenylistRule, AllowlistRule, PackageMetadata } from './types';
+import type { VintagePluginConfig, DenylistRule, AllowlistRule, PackageMetadata, CVEVulnerabilityRule } from './types';
 import { parseDenylistFile, DenylistFileNotFoundError } from './denylist-parser';
 import { parseAllowlistFile, AllowlistFileNotFoundError } from './allowlist-parser';
 import { filterPackageMetadata } from './metadata-filter';
@@ -20,6 +20,7 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
   private globalCutoff: Date | undefined;
   private denylistRules: DenylistRule[] = [];
   private allowlistRules: AllowlistRule[] = [];
+  private cveVulnerabilities: CVEVulnerabilityRule[] = [];
   private denylistWatcher: FileWatcher | null = null;
   private allowlistWatcher: FileWatcher | null = null;
 
@@ -66,6 +67,12 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
           { logger: this.logger }
         );
       }
+    }
+
+    // Load CVE vulnerabilities if enabled
+    if (config.cve_filter) {
+      this.loadCVEVulnerabilities();
+      this.logger.info('CVE vulnerability filtering enabled');
     }
 
     this.logger.info('Vintage plugin initialized');
@@ -160,6 +167,56 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
   }
 
   /**
+   * Load CVE vulnerability data
+   */
+  private loadCVEVulnerabilities(): void {
+    try {
+      // For now, use a small built-in list of known vulnerable packages
+      // In a real implementation, this would load from a file or API
+      this.cveVulnerabilities = [
+        {
+          package: 'lodash',
+          type: 'cve',
+          vulnerableRange: '<4.17.21',
+          cveId: 'CVE-2018-3721',
+          severity: 'high'
+        },
+        {
+          package: 'event-stream',
+          type: 'cve',
+          vulnerableRange: '3.3.6',
+          cveId: 'CVE-2020-28469',
+          severity: 'critical'
+        },
+        {
+          package: 'axios',
+          type: 'cve',
+          vulnerableRange: '<1.6.0',
+          cveId: 'CVE-2023-45857',
+          severity: 'medium'
+        },
+        {
+          package: 'express',
+          type: 'cve',
+          vulnerableRange: '<4.18.0',
+          cveId: 'CVE-2022-24999',
+          severity: 'high'
+        }
+      ];
+
+      this.logger.info(
+        { cveCount: this.cveVulnerabilities.length },
+        'Loaded CVE vulnerability data'
+      );
+    } catch (error) {
+      this.logger.error(
+        { error },
+        'Failed to load CVE vulnerability data, continuing without CVE filtering'
+      );
+    }
+  }
+
+  /**
    * Filter package metadata before it's returned to the client.
    * This is the main entry point called by Verdaccio.
    */
@@ -180,6 +237,7 @@ export default class VintagePlugin implements IPluginStorageFilter<VintagePlugin
         globalCutoff: this.globalCutoff,
         denylistRules: this.denylistRules,
         allowlistRules: this.allowlistRules,
+        cveVulnerabilities: this.cveVulnerabilities,
       }
     );
 

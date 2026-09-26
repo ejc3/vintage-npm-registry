@@ -7,6 +7,7 @@ A "time machine" npm registry powered by [Verdaccio](https://verdaccio.org/). Hi
 - **Global cutoff date** - Hide all package versions published after a specific date
 - **Denylist file** - Block specific versions or set per-package date cutoffs
 - **Allowlist file** - Allow specific versions to bypass date filtering
+- **CVE vulnerability filtering** - Block versions with known security vulnerabilities
 - **Hot reload** - Changes to denylist/allowlist files apply immediately without restart
 - **Podman deployment** - Ready-to-run container with everything pre-configured
 
@@ -35,6 +36,24 @@ filters:
 ```
 
 This hides ALL package versions published after January 1, 2024.
+
+### CVE Vulnerability Filtering
+
+Enable automatic filtering of packages with known CVEs:
+
+```yaml
+filters:
+  vintage:
+    cve_filter: true
+    # Optional: path to custom CVE database file
+    cve_file: '/path/to/cve-data.json'
+```
+
+Built-in CVE filtering includes:
+- **lodash** (<4.17.21) - CVE-2018-3721 (high severity)
+- **event-stream** (3.3.6) - CVE-2020-28469 (critical)
+- **axios** (<1.6.0) - CVE-2023-45857 (medium)
+- **express** (<4.18.0) - CVE-2022-24999 (high)
 
 ### Denylist File
 

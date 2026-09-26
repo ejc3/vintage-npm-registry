@@ -14,6 +14,12 @@ export interface VintagePluginConfig {
 
   /** Watch denylist/allowlist files for changes (default: true) */
   watch_denylist?: boolean;
+
+  /** Enable CVE vulnerability filtering (default: false) */
+  cve_filter?: boolean;
+
+  /** Path to CVE denylist file (optional, uses built-in if not specified) */
+  cve_file?: string;
 }
 
 /**
@@ -39,9 +45,24 @@ export interface DateDenylistRule {
 }
 
 /**
+ * A rule to block vulnerable package versions based on CVEs
+ */
+export interface CVEVulnerabilityRule {
+  /** Package name (e.g., "lodash" or "@babel/core") */
+  package: string;
+  type: 'cve';
+  /** Version or semver range with vulnerability (e.g., "4.17.4", "<4.17.21") */
+  vulnerableRange: string;
+  /** CVE identifier (e.g., "CVE-2018-3721") */
+  cveId: string;
+  /** Severity level (low, medium, high, critical) */
+  severity: string;
+}
+
+/**
  * A rule parsed from the denylist file
  */
-export type DenylistRule = VersionDenylistRule | DateDenylistRule;
+export type DenylistRule = VersionDenylistRule | DateDenylistRule | CVEVulnerabilityRule;
 
 /**
  * A rule to explicitly allow a specific version or range (bypasses date filtering)

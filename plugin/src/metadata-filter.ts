@@ -1,5 +1,5 @@
 import semver from 'semver';
-import type { DenylistRule, AllowlistRule, PackageMetadata, VersionManifest } from './types';
+import type { DenylistRule, AllowlistRule, PackageMetadata, VersionManifest, CVEVulnerabilityRule } from './types';
 
 /**
  * Get the earliest (most restrictive) cutoff date from two optional dates
@@ -196,6 +196,7 @@ export interface FilterOptions {
   globalCutoff?: Date;
   denylistRules: DenylistRule[];
   allowlistRules: AllowlistRule[];
+  cveVulnerabilities?: CVEVulnerabilityRule[];
 }
 
 /**
@@ -255,6 +256,26 @@ export function filterPackageMetadata(
   // Remove explicitly blocked versions (takes precedence over allowlist)
   if (blockedRanges.length > 0) {
     filteredVersions = removeBlockedVersions(filteredVersions, blockedRanges);
+  }
+
+  // Remove versions with known CVEs if configured
+  if (options.cveVulnerabilities) {
+    const cveBlockedRanges = options.cveVulnerabilities
+      .filter((r) => r.package === metadata.name)
+      .map((r) => r.vulnerableRange);
+    
+    if (cveBlockedRanges.length > 0) {
+      const beforeCVE = Object.keys(filteredVersions).length;
+      filteredVersions = removeBlockedVersions(filteredVersions, cveBlockedRanges);
+      const afterCVE = Object.keys(filteredVersions).length;
+      
+      if (afterCVE < beforeCVE) {
+        // Log which CVEs were filtered
+        const filteredCVEs = options.cveVulnerabilities
+          .filter((r) => r.package === metadata.name);
+        console.log(`Filtered ${beforeCVE - afterCVE} versions due to CVEs: ${filteredCVEs.map(c => c.cveId).join(', ')}`);
+      }
+    }
   }
 
   // Fix dist-tags
